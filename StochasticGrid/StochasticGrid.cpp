@@ -10,7 +10,7 @@
 const double PI = 3.14159265358979323846;
 const int N = 16, M = 1000, NTHREADS = 4, MSG_DONE = WM_USER + 1;
 
-double a = 0.08, S0 = 100, x0 = log(S0), K = 101, T = 1, r = 0.05, sigma = 0.1;
+double a = 0.08, S0 = 100, x0 = log(S0), K = 101, T = 1, r = 0.05, sigma = 0.08;
 double dt = T / N,
 sqrt_dt = sqrt(dt),
 mu_dt = (r - 0.5 * a * a) * dt,
@@ -32,7 +32,7 @@ class MeshThread : public CWinThread
 {
 	int Run();
 public:
-	int nom;
+	int thread_number;
 	bool ready;
 	CEvent go;
 
@@ -68,7 +68,7 @@ bool Set(int nom)
 
 void MeshThread::WaitForAll()
 {
-	if (nom == 0)
+	if (thread_number == 0)
 	{
 		for (;;)
 		{
@@ -79,7 +79,7 @@ void MeshThread::WaitForAll()
 	}
 	else
 	{
-		thread[0].PostThreadMessage(MSG_DONE, nom, 0);
+		thread[0].PostThreadMessage(MSG_DONE, thread_number, 0);
 		WaitForSingleObject(go.m_hObject, INFINITE);
 	}
 }
@@ -96,7 +96,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	HANDLE handles[NTHREADS];
 	for (int i = 0; i < NTHREADS; i++)
 	{
-		thread[i].nom = i;
+		thread[i].thread_number = i;
 		thread[i].CreateThread();
 		handles[i] = thread[i].m_hThread;
 	}
@@ -121,20 +121,20 @@ double P(double x, double y)
 
 int MeshThread::Run()
 {
-	std::default_random_engine rnd(2 * nom + 1);
+	std::default_random_engine rnd(2 * thread_number + 1);
 	std::normal_distribution<double> normal(0, 1);
 	std::uniform_real_distribution<double> unif(0, 1);
 	//if(nom==0){ MSG msg; PeekMessage(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);}
 
-	int Nsteps = N / NTHREADS, bs = nom * Nsteps, es = bs + Nsteps;
+	int Nsteps = N / NTHREADS, bs = thread_number * Nsteps, es = bs + Nsteps;
 	for (int n = bs; n < es; n++)
 	{
 		int n1 = n + 1;
 		double nmu = n1 * mu_dt,
-			nsig = sqrt(n1) * sqrt_dt * sigma;
+			nsig = n1 * sqrt_dt * sigma; //Зачем здесь корень из n1? Если должно быть просто n1?
 		for (int m1 = 0; m1 < M; m1++)
 		{
-			double x = x0 + nmu + nsig * normal(rnd);
+			double x = x0 + nmu + nsig * normal(rnd); //Умножение?
 			node[n1][m1].x = x;
 			node[n1][m1].q = normal_density(x0 + nmu - x, nsig);
 		}
@@ -152,7 +152,7 @@ int MeshThread::Run()
 	}
 	WaitForAll();
 
-	int Nnodes = M / NTHREADS, bn = nom * Nnodes, en = bn + Nnodes;
+	int Nnodes = M / NTHREADS, bn = thread_number * Nnodes, en = bn + Nnodes;
 	for (int m = bn; m < en; m++)
 		node[N][m].Y = max(K - exp(node[N][m].x), 0.);
 	WaitForAll();
@@ -160,7 +160,7 @@ int MeshThread::Run()
 	for (int n = N - 1; n >= 0; n--)
 	{
 		if (n == 0)
-			if (nom == 0) en = 1; else break;
+			if (thread_number == 0) en = 1; else break;
 		int n1 = n + 1;
 		for (int m = bn; m < en; m++)
 		{
