@@ -1,4 +1,6 @@
 #include "stdafx.h"
+#include "sobol.h"
+#define _USE_MATH_DEFINES
 #include <conio.h>
 #include <afxwin.h>
 #include <afxmt.h>
@@ -18,11 +20,10 @@ uniform_real_distribution<double> unif_dis(0, 1);
 random_device rd;
 mt19937 gen(rd());
 
-
-
-
 const double PI = 3.14159265358979323846;
-const int N = 16, M = 1000, NTHREADS = 2, MSG_DONE = WM_USER + 1;
+const int N = 16, M = 1000, NTHREADS = 2, MSG_DONE = WM_USER + 1, quasi_points_am = 100, random_points_am = M / quasi_points_am;
+
+Sobol sobol(2);
 
 double a = 0.08, S0 = 100, x0 = log(S0), K = 101, T = 1, r = 0.05, sigma = 0.08; //a - ¬олатильность,S0 - начальна€ цена, K - strike price, r - текуща€ процентна€ ставка
 double dt = T / N,
@@ -40,16 +41,21 @@ public:
 	~Node() { delete[] p; }
 };
 
-//Node* node[N + 1];
-
 class MeshThread : public CWinThread
 {
 	int Run();
 	double margin_density();
+	void make_quasi_points();
+	void make_random_points();
+	void rnorm_with_quasi(int p, int q, double& normal_value);
 
 public:
+	
 	int amount_of_runs;
 	double S, S2;
+
+	double quasi_points[quasi_points_am][2];
+	double random_points[random_points_am][2];
 
 	Node* node[N + 1];
 	int thread_number;
@@ -133,23 +139,35 @@ int MeshThread::Run()
 	return 0;
 }
 
-
 double MeshThread::margin_density()
 {
+	//сгенерировать квази точки
+	//на каждом шаге генерировать обычные точки
+	//рандомизировать все это дело 
+	//генерировать нормальную случ величину дл€ поиска ’
 	for (int n = 0; n <= N; n++) 
 	{ 
 		node[n] = new Node[M]; 
 	}
 	node[0][0].x = x0;
 
+	//делаю набор квази точек он будет 1 на всю работу алгоритма
+	make_quasi_points();
+
 	for (int n = 0; n < N; n++)
 	{
+		make_random_points();
 		int n1 = n + 1;
 		double nmu = n1 * mu_dt,
 			nsig = n1 * sqrt_dt * sigma; //«ачем здесь корень из n1? ≈сли должно быть просто n1?
+		//делаю дл€ каждого  n набор точек просто рандомных
 		for (int m1 = 0; m1 < M; m1++)
 		{
-			double x = x0 + nmu + nsig * norm_dis(rd);
+			int p = m1 % random_points_am,
+				q = m1 / random_points_am;
+			double norm = 0;
+			rnorm_with_quasi(p, q, norm);
+			double x = x0 + nmu + nsig * norm;
 			node[n1][m1].x = x;
 			node[n1][m1].q = normal_density(x0 + nmu - x, nsig);
 		}
@@ -205,15 +223,14 @@ double MeshThread::margin_density()
 	return node[0][0].Y;
 }
 
-
 void stats(int numberOfRuns, double& sigma, double& var, double& mean)
 {
 	double sqSum = 0;
-	time_t start, end;
-	double allRunTime = 0;
+	//time_t start, end;
+	//double allRunTime = 0;
 	double xi = 0;
 
-	time(&start);
+	//time(&start);
 
 	HANDLE handles[NTHREADS];
 
@@ -240,13 +257,13 @@ void stats(int numberOfRuns, double& sigma, double& var, double& mean)
 	sqSum = S2;
 	mean = S;
 
-	time(&end);
-	allRunTime += difftime(start, end);
+	//time(&end);
+	//allRunTime += difftime(start, end);
 	
 	var = sqSum - (mean * mean);
 	sigma = sqrt(var);
 
-	std::cout << "Average time  8k, trajectories " << allRunTime / numberOfRuns << std::endl;
+	//std::cout << "Average time  8k, trajectories " << allRunTime / numberOfRuns << std::endl;
 	std::cout << "Mean " << mean << " var " << var << " sigma " << sigma << std::endl;
 
 	_getch();
@@ -259,7 +276,45 @@ int _tmain(int argc, _TCHAR* argv[])
 	double sigma = 0;
 	double var = 0;
 	double mean = 0;
-	stats(2, sigma, var, mean);
+	stats(10, sigma, var, mean);
 	std::cout << "Mean:   " << mean << "   Sigma:   " << sigma << "    Variance:     " << var;
 	return 0;
+}
+
+
+//хочу функции создани€ квази точек, просто рандомныз точек и функцию делающую из них нормальную величину
+
+void MeshThread::make_quasi_points()
+{
+	for (int i = 0; i < quasi_points_am; i++)
+	{ 
+		sobol.next(quasi_points[i]); 
+	}
+}
+
+void MeshThread::make_random_points()
+{
+	for (int i = 0; i < random_points_am; i++)
+	{
+		random_points[i][0] = unif_dis(gen);
+		random_points[i][1] = unif_dis(gen);
+	}
+}
+
+void MeshThread::rnorm_with_quasi(int p, int q, double& normal_value)
+{
+	double first = random_points[p][0] + quasi_points[q][0];
+	if (first > 1)
+	{
+		first -= 1;
+	}
+	double second = random_points[p][1] + quasi_points[q][1];
+	if (second > 1) 
+	{
+		second -= 1;
+	}
+	double temp;
+	temp = sqrt(-2 * log(first));
+	double teta = 2 * M_PI * second;
+	normal_value = temp * cos(teta);
 }
