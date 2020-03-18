@@ -14,14 +14,15 @@
 
 using namespace std;
 
-normal_distribution<double> norm_dis(0, 1);
-uniform_real_distribution<double> unif_dis(0, 1);
 
-random_device rd;
-mt19937 gen(rd());
+//normal_distribution<double> norm_dis(0, 1);
+//uniform_real_distribution<double> unif_dis(0, 1);
+//
+//random_device rd;
+//mt19937 gen(rd());
 
 const double PI = 3.14159265358979323846;
-const int N = 16, M = 1000, NTHREADS = 2, MSG_DONE = WM_USER + 1, quasi_points_am = 100, random_points_am = M / quasi_points_am;
+const int N = 16, M = 1000, NTHREADS = 4, MSG_DONE = WM_USER + 1, quasi_points_am = 100, random_points_am = M / quasi_points_am;
 
 Sobol sobol(2);
 
@@ -44,20 +45,24 @@ public:
 class MeshThread : public CWinThread
 {
 	int Run();
+	void mesh_init();
+	void mesh_fill();
 	double margin_density();
 	void make_quasi_points();
 	void make_random_points();
+	double P(double x, double y);
+	double normal_density(double x, double s);
 	void rnorm_with_quasi(int p, int q, double& normal_value);
 
 public:
-	
+
 	int amount_of_runs;
 	double S, S2;
 
 	double quasi_points[quasi_points_am][2];
 	double random_points[random_points_am][2];
 
-	Node* node[N + 1];
+	vector<vector<Node>> node;
 	int thread_number;
 	bool ready;
 	CEvent go;
@@ -65,93 +70,29 @@ public:
 	MeshThread() : ready(false) { m_bAutoDelete = false; }
 	BOOL InitInstance() { return TRUE; }
 	int ExitInstance() { return 0; }
-	void WaitForAll();
-	void OnMsg(WPARAM wParam, LPARAM lParam);
 };
 
 MeshThread thread[NTHREADS];
 
 CCriticalSection cs;
 
-bool Set(int nom)
-{
-	cs.Lock();
-	thread[nom].ready = true;
-	for (int i = 1; i < NTHREADS; i++)
-		if (thread[i].ready == false)
-		{
-			cs.Unlock();
-			return false;
-		}
-	for (int i = 1; i < NTHREADS; i++)
-	{
-		thread[i].ready = false;
-		thread[i].go.PulseEvent();
-	}
-	cs.Unlock();
-	return true;
-}
-
-void MeshThread::WaitForAll()
-{
-	if (thread_number == 0)
-	{
-		for (;;)
-		{
-			MSG msg;
-			GetMessage(&msg, 0, 0, 0);
-			if (Set(msg.wParam)) break;
-		}
-	}
-	else
-	{
-		thread[0].PostThreadMessage(MSG_DONE, thread_number, 0);
-		WaitForSingleObject(go.m_hObject, INFINITE);
-	}
-}
-
 
 ///////////////////////////////////////////////////////////////////
 
-
-double normal_density(double x, double s)
+void MeshThread::mesh_init()
 {
-	return exp(-x * x / (2 * s*s)) / (sqrt2pi*s);
-}
+	node.resize(N + 1);
 
-double P(double x, double y)
-{
-	return normal_density(x + mu_dt - y, a * sqrt_dt);
-}
-
-int MeshThread::Run()
-{
-	S = 0;
-	S2 = 0;
-	
-	for (int i = 0; i < amount_of_runs; i++)
+	for (int i = 0; i < N + 1; i++)
 	{
-		double price = margin_density();
-		S += price;
-		S2 += price * price;
+		node[i].resize(M);
 	}
-
-	return 0;
 }
 
-double MeshThread::margin_density()
+void MeshThread::mesh_fill()
 {
-	//сгенерировать квази точки
-	//на каждом шаге генерировать обычные точки
-	//рандомизировать все это дело 
-	//генерировать нормальную случ величину для поиска Х
-	for (int n = 0; n <= N; n++) 
-	{ 
-		node[n] = new Node[M]; 
-	}
 	node[0][0].x = x0;
-
-	//делаю набор квази точек он будет 1 на всю работу алгоритма
+	
 	make_quasi_points();
 
 	for (int n = 0; n < N; n++)
@@ -173,20 +114,65 @@ double MeshThread::margin_density()
 		}
 	}
 
+
 	for (int n = 0; n < N; n++)
 	{
 		int n1 = n + 1;
 		for (int m = 0; m < M; m++)
 		{
 			for (int m1 = 0; m1 < M; m1++)
+			{
 				node[n][m].p[m1] = P(node[n][m].x, node[n1][m1].x);
+			}
 		}
+		//infinite loop 
 	}
 
 	for (int m = 0; m < M; m++)
 	{
 		node[N][m].Y = max(K - exp(node[N][m].x), 0.);
 	}
+
+}
+
+
+double MeshThread::normal_density(double x, double s)
+{
+	return exp(-x * x / (2 * s*s)) / (sqrt2pi*s);
+}
+
+double MeshThread::P(double x, double y)
+{
+	return normal_density(x + mu_dt - y, a * sqrt_dt);
+}
+
+int MeshThread::Run()
+{
+	S = 0;
+	S2 = 0;
+	
+	mesh_init();
+
+	for (int i = 0; i < amount_of_runs; i++)
+	{
+		double price = margin_density();
+		S += price;
+		S2 += price * price;
+	}
+
+	return 0;
+}
+
+double MeshThread::margin_density()
+{
+	//сгенерировать квази точки
+	//на каждом шаге генерировать обычные точки
+	//рандомизировать все это дело 
+	//генерировать нормальную случ величину для поиска Х
+
+	//делаю набор квази точек он будет 1 на всю работу алгоритма
+	
+	mesh_fill();
 
 	for (int n = N - 1; n >= 0; n--)
 	{
@@ -226,11 +212,11 @@ double MeshThread::margin_density()
 void stats(int numberOfRuns, double& sigma, double& var, double& mean)
 {
 	double sqSum = 0;
-	//time_t start, end;
-	//double allRunTime = 0;
+	time_t start, end;
+	double allRunTime = 0;
 	double xi = 0;
 
-	//time(&start);
+	time(&start);
 
 	HANDLE handles[NTHREADS];
 
@@ -257,13 +243,13 @@ void stats(int numberOfRuns, double& sigma, double& var, double& mean)
 	sqSum = S2;
 	mean = S;
 
-	//time(&end);
-	//allRunTime += difftime(start, end);
+	time(&end);
+	allRunTime += difftime(start, end);
 	
 	var = sqSum - (mean * mean);
 	sigma = sqrt(var);
 
-	//std::cout << "Average time  8k, trajectories " << allRunTime / numberOfRuns << std::endl;
+	std::cout << "Average time  8k, trajectories " << allRunTime / numberOfRuns << std::endl;
 	std::cout << "Mean " << mean << " var " << var << " sigma " << sigma << std::endl;
 
 	_getch();
@@ -294,6 +280,12 @@ void MeshThread::make_quasi_points()
 
 void MeshThread::make_random_points()
 {
+	normal_distribution<double> norm_dis(0, 1);
+	uniform_real_distribution<double> unif_dis(0, 1);
+
+	random_device rd;
+	mt19937 gen(rd());
+
 	for (int i = 0; i < random_points_am; i++)
 	{
 		random_points[i][0] = unif_dis(gen);
