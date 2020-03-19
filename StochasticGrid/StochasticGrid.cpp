@@ -15,7 +15,7 @@
 using namespace std;
 
 const double PI = 3.14159265358979323846;
-const int N = 16, M = 2000, NTHREADS = 1, MSG_DONE = WM_USER + 1, quasi_points_am = 100, random_points_am = M / quasi_points_am;
+const int N = 16, M = 4800, NTHREADS = 4, MSG_DONE = WM_USER + 1, quasi_points_am = 100, random_points_am = M / quasi_points_am;
 
 Sobol sobol(2);
 
@@ -54,7 +54,8 @@ public:
 	double quasi_points[quasi_points_am][2];
 	double random_points[random_points_am][2];
 
-	vector<vector<Node>> node;
+	//vector<vector<Node>> node;
+	Node* node[N + 1];
 	int thread_number;
 	bool ready;
 	CEvent go;
@@ -73,12 +74,7 @@ CCriticalSection cs;
 
 void MeshThread::mesh_init()
 {
-	node.resize(N + 1);
-
-	for (int i = 0; i < N + 1; i++)
-	{
-		node[i].resize(M);
-	}
+	for (int n = 0; n <= N; n++) node[n] = new Node[M];
 }
 
 void MeshThread::mesh_fill()
@@ -240,7 +236,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	double sigma = 0;
 	double var = 0;
 	double mean = 0;
-	stats(1, sigma, var, mean);
+	stats(20, sigma, var, mean);
 	std::cout << "Mean:   " << mean << "   Sigma:   " << sigma << "    Variance:     " << var;
 	return 0;
 }
