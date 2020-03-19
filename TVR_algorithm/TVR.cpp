@@ -27,7 +27,7 @@ ofstream fout;
 
 uniform_real_distribution<double> unif_dis(0, 1);
 
-const int N = 16, M = pow(2, 13); //Число шагов // количество моделируемых траекторий
+const int N = 16, M = 8192; //Число шагов // количество моделируемых траекторий
 double S0 = 100, sigma = 0.08, mu = 0.05, dt = 1.0 / N, //начальная цена, волатильность, текущая процентная ставка
 K = 101, pf1 = (mu - sigma * sigma * 0.5) * dt, pf2 = sigma * sqrt(dt); //strike price и просто промежуточные вычисления
 
@@ -35,17 +35,14 @@ Sobol sobol(N);
 double sx[N];
 double randFT = unif_dis(gen);
 
+/*class TVR
+{
 
 
+public:
+	double price[M][N + 1];
 
-
-
-
-
-
-
-
-
+};*/
 
 
 //фиксить??
@@ -108,26 +105,35 @@ void prices(vector<double>& price)
 
 //фиксить
 //Функция генерирущая 1 траекторию цены с помощью КМК
-void prices_withQMC(vector<double>& price)
+void prices_withQMC(double price)
 {
-	price.resize(N + 1);
+
+	/*price.resize(N + 1);
 	price[0] = S0;
 	vector<double> normal_numbers(N);
 	normal_numbers = norm_dis_vec();
 	for (size_t i = 1; i <= N; i++)
-		price[i] = price[i - 1] * exp(pf1 + pf2 * normal_numbers[i - 1]);
+		price[i] = price[i - 1] * exp(pf1 + pf2 * normal_numbers[i - 1]);*/
 }
 
 
+
 //фиксить
-//функция генерирующая матрицу M * N цен, и заполняет нужный для вычислений вектор W параметры start и end чтобы распараллелить этот процесс
-void total_price_modeling(vector<vector<double>>& price_matrix, vector<double>& W, int start, int end)
+//функция генерирующая матрицу M * N цен, и заполняет нужный для вычислений вектор W
+void total_price_modeling(double** price_matrix, vector<double>& W)
 {
-	for (int i = start; i < end; i++)
+	vector<double> normal_numbers(N);
+	for (int i = 0; i < M; i++)
 	{
-		prices_withQMC(price_matrix[i]); //Цены формируются с использованием чисел соболя
-		//prices(price[i]); //Цены формируются просто случайными величинами
-		W[i] = pay_func(price_matrix[i].back(), N);
+		price_matrix[i][0] = S0;
+		normal_numbers = norm_dis_vec();
+		
+		for (int j = 1; j < N + 1; j++)
+		{
+			price_matrix[i][j] = price_matrix[i][j - 1] * exp(pf1 + pf2 * normal_numbers[j - 1]);
+		}
+
+		W[i] = pay_func(price_matrix[i][N], N);
 	}
 }
 
@@ -140,26 +146,7 @@ vector<double> beta(vector<double>& beta, vector<double> w, vector<vector<double
 	vector<vector<double>> mnk(7);
 	time_t start, end;
 	time(&start);
-	for (int i = 0; i < 7; i++)
-	{
-		mnk[i].resize(8);
-		for (int j = 0; j < 8; j++)
-		{
-			double a_ij = 0;
-			for (int traectory = 0; traectory < M; traectory++)
-			{
-				if (j != 7)
-				{
-					a_ij += basis_func(price[traectory][time1], i) * basis_func(price[traectory][time1], j);
-				}
-				else
-				{
-					a_ij += basis_func(price[traectory][time1], i) * w[traectory];
-				}
-			}
-			mnk[i][j] = a_ij;
-		}
-	}
+
 
 
 	time(&end);
@@ -173,26 +160,18 @@ vector<double> beta(vector<double>& beta, vector<double> w, vector<vector<double
 //Функция выдающая оценку
 void opt_price(double& x)
 {
-	vector<vector<double>> price(M);
+	double** price = new double*[M];
+	for (int n = 0; n <= M; n++) 
+		price[n] = new double[N + 1];
+	//double price[M][N + 1];
 	vector<double> W(M);
 	vector<double> beta_j(7);
+
 	double option_price = 0;
-	for (int i = 0; i < M; i++)
-	{
-		prices_withQMC(price[i]); //цены формируются с использованием чисел соболя
-		//prices(price[i]); //цены формируются просто случайными величинами
-		W[i] = pay_func(price[i].back(), N);
-	}
 
-	/*for (int i = 0; i < price.size(); i++) //вывод траекторий в файл
-	{
-		for (int j = 0; j < price[i].size(); j++)
-		{
-			fout << price[i][j] << "  ";
-		}
-		fout << endl;
-	}*/
+	total_price_modeling(price, W); //это без квази чисел
 
+	//нужно теперь поиск вектора бета сделать из регрессии 
 	for (int time = N; time >= 1; time--) //дебил, здесь 0 должен быть
 	{
 		beta(beta_j, W, price, time);
@@ -243,13 +222,28 @@ void stats(int numberOfRuns, double& sigma, double& var, double& mean)
 int main()
 {
 	setlocale(LC_ALL, "russian");
+	//thread threads[2];
+
 	fout.open("output.txt");
 	double sigma = 0;
 	double var = 0;
 	double mean = 0;
+	opt_price(var);
 	//stats(1, sigma, var, mean);
 	cout << "Mean:   " << mean << "   Sigma:   " << sigma << "    Variance:     " << var;
 	//Сетка при 1000 шагов  2.2048
 	//увеличить до 40 мб
 	return 0;
 }
+
+
+/*
+for (int i = 0; i < price.size(); i++) //вывод траекторий в файл
+{
+	for (int j = 0; j < price[i].size(); j++)
+	{
+		fout << price[i][j] << "  ";
+	}
+	fout << endl;
+}
+*/
