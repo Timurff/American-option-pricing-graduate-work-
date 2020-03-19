@@ -14,15 +14,8 @@
 
 using namespace std;
 
-
-//normal_distribution<double> norm_dis(0, 1);
-//uniform_real_distribution<double> unif_dis(0, 1);
-//
-//random_device rd;
-//mt19937 gen(rd());
-
 const double PI = 3.14159265358979323846;
-const int N = 16, M = 1000, NTHREADS = 4, MSG_DONE = WM_USER + 1, quasi_points_am = 100, random_points_am = M / quasi_points_am;
+const int N = 16, M = 2000, NTHREADS = 1, MSG_DONE = WM_USER + 1, quasi_points_am = 100, random_points_am = M / quasi_points_am;
 
 Sobol sobol(2);
 
@@ -37,9 +30,8 @@ struct Node
 {
 public:
 	double x, q, Y;
-	double* p;
-	Node() { p = new double[M]; }
-	~Node() { delete[] p; }
+	Node() { x = 0; q = 1; Y = 0;}
+	~Node() {}
 };
 
 class MeshThread : public CWinThread
@@ -114,20 +106,6 @@ void MeshThread::mesh_fill()
 		}
 	}
 
-
-	for (int n = 0; n < N; n++)
-	{
-		int n1 = n + 1;
-		for (int m = 0; m < M; m++)
-		{
-			for (int m1 = 0; m1 < M; m1++)
-			{
-				node[n][m].p[m1] = P(node[n][m].x, node[n1][m1].x);
-			}
-		}
-		//infinite loop 
-	}
-
 	for (int m = 0; m < M; m++)
 	{
 		node[N][m].Y = max(K - exp(node[N][m].x), 0.);
@@ -182,8 +160,8 @@ double MeshThread::margin_density()
 		{
 			double SY = 0, S1 = 0;
 			for (int m1 = 0; m1 < M; m1++)
-			{
-				double rho = node[n][0].p[m1] / node[n1][m1].q;
+			{	
+				double rho = P(node[n][0].x, node[n1][m1].x) / node[n1][m1].q;
 				SY += rho * node[n1][m1].Y;
 				S1 += rho;
 			}
@@ -197,7 +175,7 @@ double MeshThread::margin_density()
 			double SY = 0, S1 = 0;
 			for (int m1 = 0; m1 < M; m1++)
 			{
-				double rho = node[n][m].p[m1] / node[n1][m1].q;
+				double rho = P(node[n][m].x, node[n1][m1].x) / node[n1][m1].q;
 				SY += rho * node[n1][m1].Y;
 				S1 += rho;
 			}
@@ -262,7 +240,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	double sigma = 0;
 	double var = 0;
 	double mean = 0;
-	stats(10, sigma, var, mean);
+	stats(1, sigma, var, mean);
 	std::cout << "Mean:   " << mean << "   Sigma:   " << sigma << "    Variance:     " << var;
 	return 0;
 }
