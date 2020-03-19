@@ -35,100 +35,20 @@ Sobol sobol(N);
 double sx[N];
 double randFT = unif_dis(gen);
 
-//функция поиска наибольшего элемента в строке матрицы
-int max_element(vector<vector<double> > matrix, int column_number)
-{
-	double max = abs(matrix[0][column_number]);
-	int stroka = 0;
-	size_t n = matrix.size();
-	for (int i = 0; i < n; i++)
-	{
-		if (abs(matrix[i][column_number]) > max)
-		{
-			max = matrix[i][column_number];
-			stroka = i;
-		}
-	}
-	return stroka;
-}
 
-//Функция прямого хода
-vector<vector<double>> gausswmec_straight(vector<vector<double>> matrix)
-{
-	size_t n = matrix.size();
-	vector<vector<double>> matrix_final;
-	while (n > 1)
-	{
-		int column = 0;
-		int main_string = max_element(matrix, column);
-		vector<double> multiplier(n); //вектор кэфов для обнуления столбца главного элемента
-		//заполняем multiplier
-		for (int i = 0; i < n; i++)
-		{
-			if (i != main_string)
-			{
-				multiplier[i] = (-1) * matrix[i][column] / matrix[main_string][column];
-			}
-			else
-			{
-				multiplier.push_back(1);
-			}
-		}
-		//добавляем к остальным строкам главную строку помноженную на кэффы
-		for (int i = 0; i < n; i++)
-		{
-			if (i != main_string)
-			{
-				for (int j = 0; j < n + 1; j++)
-				{
-					matrix[i][j] += multiplier[i] * (matrix[main_string][j]);
-				}
-			}
-		}
-		//Добавляем нашу главную строку в финальную матрицу
-		matrix_final.push_back(matrix[main_string]);
-		matrix.erase(matrix.begin() + main_string);
-		n = matrix.size();
-		for (int i = 0; i < n; i++)
-		{
-			matrix[i].erase(matrix[i].begin() + column);
-		}
-	}
-	matrix[0][1] /= matrix[0][0];
-	matrix[0][0] = 1;
-	matrix_final.push_back(matrix[0]);
-	return matrix_final;
-}
 
-//Функция обратного хода
-vector<double> gausswmec_reverse(vector<vector<double>> matrix_final)
-{
-	size_t n = matrix_final.size() - 1;
-	vector<double> coefficients(n + 1);
-	coefficients[0] = matrix_final[n][1];
-	for (int i = 1; i < n + 1; i++)
-	{
-		coefficients[i] = matrix_final[n - i][matrix_final[n - i].size() - 1];
-		for (size_t j = matrix_final[n - i].size() - 2; j > 0; j)
-		{
-			for (int u = 0; u < i; u++)
-			{
-				coefficients[i] -= (matrix_final[n - i][j] * coefficients[u]);
-				j--;
-			}
-		}
-		coefficients[i] /= matrix_final[n - i][0];
-	}
-	reverse(coefficients.begin(), coefficients.end());
-	return coefficients;
-}
 
-//функция для решения СЛАУ методом Гаусса с выбором главного элемента
-vector<double> gausswmec(vector<vector<double> > matrix)
-{
-	return gausswmec_reverse(gausswmec_straight(matrix));
-}
 
+
+
+
+
+
+
+
+
+
+//фиксить??
 //Функция которая считает значение базисных многочленов
 double basis_func(double x, int power)
 {
@@ -142,6 +62,8 @@ double basis_func(double x, int power)
 	}
 }
 
+
+//фиксить??
 //Функция считающая значени платежной
 double pay_func(double x, double time)
 {
@@ -150,6 +72,8 @@ double pay_func(double x, double time)
 		temp * max(0.0, (K - x));
 }
 
+
+//фиксить
 //Функция создающая вектор с 16 нормально распределенными величинами
 vector<double> norm_dis_vec()
 {
@@ -172,6 +96,7 @@ vector<double> norm_dis_vec()
 	return nDis;
 }
 
+//фиксить
 //Функция генерирующая 1 траекторию цены
 void prices(vector<double>& price)
 {
@@ -181,6 +106,7 @@ void prices(vector<double>& price)
 		price[i] = price[i - 1] * exp(pf1 + pf2 * norm_dis(gen));
 }
 
+//фиксить
 //Функция генерирущая 1 траекторию цены с помощью КМК
 void prices_withQMC(vector<double>& price)
 {
@@ -192,6 +118,8 @@ void prices_withQMC(vector<double>& price)
 		price[i] = price[i - 1] * exp(pf1 + pf2 * normal_numbers[i - 1]);
 }
 
+
+//фиксить
 //функция генерирующая матрицу M * N цен, и заполняет нужный для вычислений вектор W параметры start и end чтобы распараллелить этот процесс
 void total_price_modeling(vector<vector<double>>& price_matrix, vector<double>& W, int start, int end)
 {
@@ -203,6 +131,8 @@ void total_price_modeling(vector<vector<double>>& price_matrix, vector<double>& 
 	}
 }
 
+
+//Переделывать полностью
 //Функция вычисляющая вектор кэфов бета Исправить название параметра time1 -> time
 vector<double> beta(vector<double>& beta, vector<double> w, vector<vector<double>> price, int time1)
 {
@@ -236,7 +166,7 @@ vector<double> beta(vector<double>& beta, vector<double> w, vector<vector<double
 	fout << difftime(end, start) << endl;
 
 
-	beta = gausswmec(mnk);
+	//beta = gausswmec(mnk);
 	return beta;
 }
 
@@ -263,7 +193,7 @@ void opt_price(double& x)
 		fout << endl;
 	}*/
 
-	for (int time = N; time >= 1; time--)
+	for (int time = N; time >= 1; time--) //дебил, здесь 0 должен быть
 	{
 		beta(beta_j, W, price, time);
 		for (int traectory = 0; traectory < M; traectory++)
@@ -274,7 +204,7 @@ void opt_price(double& x)
 				q += beta_j[k] * basis_func(price[traectory][time], k);
 			}
 			W[traectory] = max(pay_func(price[traectory][time], time), q);
-			if (time == 1)
+			if (time == 1) //и здесь 0, мудак
 			{
 				option_price += W[traectory];
 			}
@@ -317,7 +247,7 @@ int main()
 	double sigma = 0;
 	double var = 0;
 	double mean = 0;
-	stats(1, sigma, var, mean);
+	//stats(1, sigma, var, mean);
 	cout << "Mean:   " << mean << "   Sigma:   " << sigma << "    Variance:     " << var;
 	//Сетка при 1000 шагов  2.2048
 	//увеличить до 40 мб
