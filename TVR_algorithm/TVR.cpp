@@ -27,7 +27,7 @@ ofstream fout;
 
 uniform_real_distribution<double> unif_dis(0, 1);
 
-const int N = 16, M = 8192; //Число шагов // количество моделируемых траекторий
+const int N = 16, M = 8192, basis_fun_am = 7; //Число шагов // количество моделируемых траекторий
 double S0 = 100, sigma = 0.08, mu = 0.05, dt = 1.0 / N, //начальная цена, волатильность, текущая процентная ставка
 K = 101, pf1 = (mu - sigma * sigma * 0.5) * dt, pf2 = sigma * sqrt(dt); //strike price и просто промежуточные вычисления
 
@@ -35,17 +35,6 @@ Sobol sobol(N);
 double sx[N];
 double randFT = unif_dis(gen);
 
-/*class TVR
-{
-
-
-public:
-	double price[M][N + 1];
-
-};*/
-
-
-//фиксить??
 //Функция которая считает значение базисных многочленов
 double basis_func(double x, int power)
 {
@@ -59,6 +48,18 @@ double basis_func(double x, int power)
 	}
 }
 
+//возвращает вектор с примененным к x базисными функциями
+vector<double> basis(double x)
+{
+	vector<double> res(basis_fun_am);
+
+	for (int i = 0; i < basis_fun_am; i++)
+	{
+		res[i] = basis_func(x, i);
+	}
+
+	return res;
+}
 
 //фиксить??
 //Функция считающая значени платежной
@@ -118,8 +119,8 @@ void prices_withQMC(double price)
 
 
 
-//фиксить
-//функция генерирующая матрицу M * N цен, и заполняет нужный для вычислений вектор W
+//вроде фиксед
+//функция генерирующая матрицу M * N цен, и заполняет нужный для вычислений вектор W, использует квази числа
 void total_price_modeling(double** price_matrix, vector<double>& W)
 {
 	vector<double> normal_numbers(N);
@@ -138,23 +139,34 @@ void total_price_modeling(double** price_matrix, vector<double>& W)
 }
 
 
-//Переделывать полностью
-//Функция вычисляющая вектор кэфов бета Исправить название параметра time1 -> time
-vector<double> beta(vector<double>& beta, vector<double> w, vector<vector<double>> price, int time1)
+
+//шаг стохастического градиентного шага
+void SGD_step(vector<double>& beta, double X_i, double W, double step)
 {
-	//заполняем матрицу мнк
-	vector<vector<double>> mnk(7);
-	time_t start, end;
-	time(&start);
+	vector<double> x = basis(X_i);
+	double adjust = 0;
+	for (int i = 0; i < basis_fun_am; i++)
+	{
+		adjust += beta[i] * x[i];
+	}
 
+	adjust -= W;
+	adjust = adjust * 2 * step;
 
+	for (int i = 0; i < basis_fun_am; i++)
+	{
+		beta[i] -= adjust * x[i];
+	}
+}
 
-	time(&end);
-	fout << difftime(end, start) << endl;
+//Переделывать полностью
+//Функция вычисляющая вектор кэфов бета 
+void linear_reg(vector<double>& beta, vector<double> w, double** prices, int time)
+{
+	//уже тут я рандомлю номер элемента, по которому улучшаю свою оценку, начальное приближение сделаю (0, 0 , 0, 0 ,0) 
+	//написать функцию, возвращающую вектор с примененным к цене базисным функциям
+	
 
-
-	//beta = gausswmec(mnk);
-	return beta;
 }
 
 //Функция выдающая оценку
@@ -165,25 +177,25 @@ void opt_price(double& x)
 		price[n] = new double[N + 1];
 	//double price[M][N + 1];
 	vector<double> W(M);
-	vector<double> beta_j(7);
+	vector<double> beta_j(basis_fun_am);
 
 	double option_price = 0;
 
-	total_price_modeling(price, W); //это без квази чисел
+	total_price_modeling(price, W); //это с квази числами
 
-	//нужно теперь поиск вектора бета сделать из регрессии 
-	for (int time = N; time >= 1; time--) //дебил, здесь 0 должен быть
+	//нужно теперь поиск вектора бета сделать из регрессии, 
+	for (int time = N; time >= 0; time--) //дебил, здесь 0 должен быть
 	{
-		beta(beta_j, W, price, time);
+		linear_reg(beta_j, W, price, time);
 		for (int traectory = 0; traectory < M; traectory++)
 		{
 			double q = 0;
-			for (int k = 0; k < 7; k++)
+			for (int k = 0; k < basis_fun_am; k++)
 			{
 				q += beta_j[k] * basis_func(price[traectory][time], k);
 			}
 			W[traectory] = max(pay_func(price[traectory][time], time), q);
-			if (time == 1) //и здесь 0, мудак
+			if (time == 0) //и здесь 0, мудак
 			{
 				option_price += W[traectory];
 			}
