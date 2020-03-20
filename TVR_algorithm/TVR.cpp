@@ -223,7 +223,7 @@ void SGD(vector<double>& beta, vector<double> W, double** prices, int time)
 		iter_num++;
 		int ind = unif_dis_int(gen);
 		//next_beta = SGD_step(beta, prices[ind][time], W[ind], 1. / M);
-		next_beta = SGD_step_L2_reg(beta, prices[ind][time], W[ind], 1. / M, 5.);
+		next_beta = SGD_step_L2_reg(beta, prices[ind][time], W[ind], 1. / M, 55);
 		w_distance = norm_2(beta, next_beta);
 		beta = next_beta;
 	} while (w_distance > eps);
@@ -235,12 +235,74 @@ void SGD(vector<double>& beta, vector<double> W, double** prices, int time)
 	cout <<endl <<  " iter am   " << iter_num << endl;
 }
 
+vector<double> GD_step(vector<double> beta, double** X, vector<double> W, double step)
+{
+	vector<double> res(basis_fun_am);
+
+	for (int k = 0; k < basis_fun_am; k++)
+	{
+		double adj = 0;
+		for (int j = 0; j < M; j++)
+		{
+			double temp = 0;
+			for (int i = 0; i < basis_fun_am; i++)
+			{
+				temp += X[j][i] * beta[i];
+			}
+			temp -= W[j];
+			temp *= X[j][k];
+			adj += temp;
+		}
+		res[k] = beta[k] - 2 * step * adj;
+	}
+
+	return res;
+}
+
+void GD(vector<double>& beta, vector<double> W, double** prices, int time)
+{
+	uniform_real_distribution<double> first_adj(-1. / (2 * basis_fun_am), 1. / (2 * basis_fun_am));
+
+	double** regr = new double*[M];
+	for (int n = 0; n <= M; n++)
+		regr[n] = new double[basis_fun_am];
+
+	for (int i = 0; i < M; i++)
+	{
+		for (int j = 0; j < basis_fun_am; j++)
+		{
+			regr[i][j] = basis_func(prices[i][time], j);
+		}
+	}
+
+	vector<double> next_beta(basis_fun_am);
+
+	for (int i = 0; i < next_beta.size(); i++)
+	{
+		beta[i] = first_adj(gen);
+	}
+	int iter_num = 0;
+	double w_distance = 1;
+	do {
+		iter_num++;
+		next_beta = GD_step(beta, regr, W, 1. / M);
+		w_distance = norm_2(beta, next_beta);
+		beta = next_beta;
+	} while (w_distance > eps);
+	cout << iter_num << endl;
+	/*for (int i = 0; i < M; i++)
+	{
+		delete[] regr[i];
+	}
+	delete[] regr;*/
+}
 
 //‘ункци€ вычисл€юща€ вектор кэфов бета 
 void linear_reg(vector<double>& beta, vector<double> W, double** prices, int time)
 {
 	//уже тут € рандомлю номер элемента, по которому улучшаю свою оценку, начальное приближение сделаю (0, 0 , 0, 0 ,0) 
-	SGD(beta, W, prices, time);
+	//SGD(beta, W, prices, time);
+	GD(beta, W, prices, time);
 	double error = MSE(prices, W, beta, time);
 	cout << "MSE  " << error << endl;
 }
@@ -293,8 +355,8 @@ void stats(int numberOfRuns, double& sigma, double& var, double& mean)
 		sqSum += xi * xi;
 		mean += xi;
 		
-		allRunTime += difftime(start, end);
-		fout << endl << "new run " << endl;
+		//allRunTime += difftime(start, end);
+		//fout << endl << "new run " << endl;
 	}
 	time(&end);
 	mean *= 1.0 / numberOfRuns;
