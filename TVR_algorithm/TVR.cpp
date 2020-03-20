@@ -30,10 +30,27 @@ uniform_real_distribution<double> unif_dis(0, 1);
 const int N = 16, M = 8192, basis_fun_am = 7; //Число шагов // количество моделируемых траекторий
 double S0 = 100, sigma = 0.08, mu = 0.05, dt = 1.0 / N, //начальная цена, волатильность, текущая процентная ставка
 K = 101, pf1 = (mu - sigma * sigma * 0.5) * dt, pf2 = sigma * sqrt(dt); //strike price и просто промежуточные вычисления
+double eps = 0.00001;
+
+uniform_int_distribution<> unif_dis_int(0, M - 1);
 
 Sobol sobol(N);
 double sx[N];
 double randFT = unif_dis(gen);
+
+//считает норму разсности двух векторов
+double norm_2(vector<double> v1, vector<double> v2)
+{
+	double res = 0;
+	for (int i = 0; i < v1.size(); i++)
+	{
+		double temp = (v1[i] - v2[i]);
+		res += temp * temp;
+	}
+
+	return sqrt(res);
+}
+
 
 //Функция которая считает значение базисных многочленов
 double basis_func(double x, int power)
@@ -128,7 +145,7 @@ void total_price_modeling(double** price_matrix, vector<double>& W)
 	{
 		price_matrix[i][0] = S0;
 		normal_numbers = norm_dis_vec();
-		
+
 		for (int j = 1; j < N + 1; j++)
 		{
 			price_matrix[i][j] = price_matrix[i][j - 1] * exp(pf1 + pf2 * normal_numbers[j - 1]);
@@ -141,9 +158,10 @@ void total_price_modeling(double** price_matrix, vector<double>& W)
 
 
 //шаг стохастического градиентного шага
-void SGD_step(vector<double>& beta, double X_i, double W, double step)
+vector<double> SGD_step(vector<double> beta, double X_i, double W, double step)
 {
 	vector<double> x = basis(X_i);
+	vector<double> res(basis_fun_am);
 	double adjust = 0;
 	for (int i = 0; i < basis_fun_am; i++)
 	{
@@ -155,8 +173,10 @@ void SGD_step(vector<double>& beta, double X_i, double W, double step)
 
 	for (int i = 0; i < basis_fun_am; i++)
 	{
-		beta[i] -= adjust * x[i];
+		res[i] = beta[i] - adjust * x[i];
 	}
+	
+	return res;
 }
 
 //Переделывать полностью
@@ -164,8 +184,22 @@ void SGD_step(vector<double>& beta, double X_i, double W, double step)
 void linear_reg(vector<double>& beta, vector<double> w, double** prices, int time)
 {
 	//уже тут я рандомлю номер элемента, по которому улучшаю свою оценку, начальное приближение сделаю (0, 0 , 0, 0 ,0) 
-	//написать функцию, возвращающую вектор с примененным к цене базисным функциям
-	
+	vector<double> next_beta(basis_fun_am);
+	for (int i = 0; i < next_beta.size(); i++)
+	{
+		beta[i] = 10;
+		cout << next_beta[i] << "           " << beta[i] << endl;
+	}
+	int iter_num = 0;
+	double w_distance = 1;
+	do {
+		iter_num++;
+		int ind = unif_dis_int(gen);
+		next_beta = SGD_step(beta, prices[ind][time], w[ind], 0.00001);
+		w_distance = norm_2(beta, next_beta);
+		beta = next_beta;
+	} while (w_distance > eps);
+	cout << iter_num << endl;
 
 }
 
@@ -173,7 +207,7 @@ void linear_reg(vector<double>& beta, vector<double> w, double** prices, int tim
 void opt_price(double& x)
 {
 	double** price = new double*[M];
-	for (int n = 0; n <= M; n++) 
+	for (int n = 0; n <= M; n++)
 		price[n] = new double[N + 1];
 	//double price[M][N + 1];
 	vector<double> W(M);
@@ -241,6 +275,7 @@ int main()
 	double var = 0;
 	double mean = 0;
 	opt_price(var);
+	cout << var << endl;
 	//stats(1, sigma, var, mean);
 	cout << "Mean:   " << mean << "   Sigma:   " << sigma << "    Variance:     " << var;
 	//Сетка при 1000 шагов  2.2048
