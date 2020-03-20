@@ -51,7 +51,6 @@ double norm_2(vector<double> v1, vector<double> v2)
 	return sqrt(res);
 }
 
-
 //‘ункци€ котора€ считает значение базисных многочленов
 double basis_func(double x, int power)
 {
@@ -73,6 +72,21 @@ vector<double> basis(double x)
 	for (int i = 0; i < basis_fun_am; i++)
 	{
 		res[i] = basis_func(x, i);
+	}
+
+	return res;
+}
+
+double MSE(double** price, vector<double> W, vector<double> beta, int time)
+{
+	double res = 0;
+	for (int i = 0; i < M; i++)
+	{
+		for (int j = 0; j < basis_fun_am; j++)
+		{
+			double temp = basis(price[i][time])[j] * beta[j] - W[i];
+			res += temp * temp;
+		}
 	}
 
 	return res;
@@ -179,28 +193,35 @@ vector<double> SGD_step(vector<double> beta, double X_i, double W, double step)
 	return res;
 }
 
-//ѕеределывать полностью
-//‘ункци€ вычисл€юща€ вектор кэфов бета 
-void linear_reg(vector<double>& beta, vector<double> w, double** prices, int time)
+void SGD(vector<double>& beta, vector<double> W, double** prices, int time)
 {
-	//уже тут € рандомлю номер элемента, по которому улучшаю свою оценку, начальное приближение сделаю (0, 0 , 0, 0 ,0) 
 	vector<double> next_beta(basis_fun_am);
+	uniform_real_distribution<double> first_adj(-1. / (2 * basis_fun_am), 1. / (2 * basis_fun_am));
 	for (int i = 0; i < next_beta.size(); i++)
 	{
-		beta[i] = 10;
-		cout << next_beta[i] << "           " << beta[i] << endl;
+		beta[i] = first_adj(gen);
 	}
 	int iter_num = 0;
 	double w_distance = 1;
 	do {
 		iter_num++;
 		int ind = unif_dis_int(gen);
-		next_beta = SGD_step(beta, prices[ind][time], w[ind], 0.00001);
+		next_beta = SGD_step(beta, prices[ind][time], W[ind], 1. / M);
 		w_distance = norm_2(beta, next_beta);
 		beta = next_beta;
 	} while (w_distance > eps);
-	cout << iter_num << endl;
 
+	cout << " iter am   " << iter_num << endl;
+}
+
+//ѕеределывать полностью
+//‘ункци€ вычисл€юща€ вектор кэфов бета 
+void linear_reg(vector<double>& beta, vector<double> W, double** prices, int time)
+{
+	//уже тут € рандомлю номер элемента, по которому улучшаю свою оценку, начальное приближение сделаю (0, 0 , 0, 0 ,0) 
+	SGD(beta, W, prices, time);
+	double error = MSE(prices, W, beta, time);
+	cout << "MSE  " << error << endl;
 }
 
 //‘ункци€ выдающа€ оценку
