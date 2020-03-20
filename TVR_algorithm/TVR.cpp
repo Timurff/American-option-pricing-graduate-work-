@@ -36,7 +36,6 @@ uniform_int_distribution<> unif_dis_int(0, M - 1);
 
 Sobol sobol(N);
 double sx[N];
-double randFT = unif_dis(gen);
 
 //считает норму разсности двух векторов
 double norm_2(vector<double> v1, vector<double> v2)
@@ -110,7 +109,8 @@ vector<double> norm_dis_vec()
 	for (int i = 0; i < N; i++)
 	{
 		double& sxi = sx[i];
-		sxi += randFT;
+		double rand_num = unif_dis(gen);
+		sxi += rand_num;
 		if (sxi > 1) sxi -= 1;
 	}
 	vector<double> nDis(N);
@@ -125,34 +125,9 @@ vector<double> norm_dis_vec()
 	return nDis;
 }
 
-//фиксить
-//‘ункци€ генерирующа€ 1 траекторию цены
-void prices(vector<double>& price)
-{
-	price.resize(N + 1);
-	price[0] = S0;
-	for (size_t i = 1; i < N + 1; i++)
-		price[i] = price[i - 1] * exp(pf1 + pf2 * norm_dis(gen));
-}
 
-//фиксить
-//‘ункци€ генерируща€ 1 траекторию цены с помощью  ћ 
-void prices_withQMC(double price)
-{
-
-	/*price.resize(N + 1);
-	price[0] = S0;
-	vector<double> normal_numbers(N);
-	normal_numbers = norm_dis_vec();
-	for (size_t i = 1; i <= N; i++)
-		price[i] = price[i - 1] * exp(pf1 + pf2 * normal_numbers[i - 1]);*/
-}
-
-
-
-//вроде фиксед
 //функци€ генерирующа€ матрицу M * N цен, и заполн€ет нужный дл€ вычислений вектор W, использует квази числа
-void total_price_modeling(double** price_matrix, vector<double>& W)
+void price_modeling_QMC(double** price_matrix, vector<double>& W)
 {
 	vector<double> normal_numbers(N);
 	for (int i = 0; i < M; i++)
@@ -163,6 +138,25 @@ void total_price_modeling(double** price_matrix, vector<double>& W)
 		for (int j = 1; j < N + 1; j++)
 		{
 			price_matrix[i][j] = price_matrix[i][j - 1] * exp(pf1 + pf2 * normal_numbers[j - 1]);
+		}
+
+		W[i] = pay_func(price_matrix[i][N], N);
+	}
+}
+
+
+//функци€ генерирующа€ матрицу M * N цен, и заполн€ет нужный дл€ вычислений вектор W
+void price_modeling(double** price_matrix, vector<double>& W)
+{
+	vector<double> normal_numbers(N);
+	for (int i = 0; i < M; i++)
+	{
+		price_matrix[i][0] = S0;
+		normal_numbers = norm_dis_vec();
+
+		for (int j = 1; j < N + 1; j++)
+		{
+			price_matrix[i][j] = price_matrix[i][j - 1] * exp(pf1 + pf2 * norm_dis(gen));
 		}
 
 		W[i] = pay_func(price_matrix[i][N], N);
@@ -193,7 +187,7 @@ vector<double> SGD_step(vector<double> beta, double X_i, double W, double step)
 	return res;
 }
 
-//SGD с регул€ризацией
+//SGD шаг с регул€ризацией
 vector<double> SGD_step_L2_reg(vector<double> beta, double X_i, double W, double step, double lambda)
 {
 	vector<double> x = basis(X_i);
@@ -234,10 +228,14 @@ void SGD(vector<double>& beta, vector<double> W, double** prices, int time)
 		beta = next_beta;
 	} while (w_distance > eps);
 
-	cout << " iter am   " << iter_num << endl;
+	for (int i = 0; i < beta.size(); i++)
+	{
+		cout << beta[i] << "    ";
+	}
+	cout <<endl <<  " iter am   " << iter_num << endl;
 }
 
-//ѕеределывать полностью
+
 //‘ункци€ вычисл€юща€ вектор кэфов бета 
 void linear_reg(vector<double>& beta, vector<double> W, double** prices, int time)
 {
@@ -253,16 +251,13 @@ void opt_price(double& x)
 	double** price = new double*[M];
 	for (int n = 0; n <= M; n++)
 		price[n] = new double[N + 1];
-	//double price[M][N + 1];
 	vector<double> W(M);
 	vector<double> beta_j(basis_fun_am);
 
 	double option_price = 0;
 
-	total_price_modeling(price, W); //это с квази числами
-
-	//нужно теперь поиск вектора бета сделать из регрессии, 
-	for (int time = N; time >= 0; time--) //дебил, здесь 0 должен быть
+	price_modeling_QMC(price, W); //это с квази числами
+	for (int time = N; time >= 0; time--)
 	{
 		linear_reg(beta_j, W, price, time);
 		for (int traectory = 0; traectory < M; traectory++)
@@ -273,7 +268,7 @@ void opt_price(double& x)
 				q += beta_j[k] * basis_func(price[traectory][time], k);
 			}
 			W[traectory] = max(pay_func(price[traectory][time], time), q);
-			if (time == 0) //и здесь 0, мудак
+			if (time == 0)
 			{
 				option_price += W[traectory];
 			}
@@ -289,24 +284,24 @@ void stats(int numberOfRuns, double& sigma, double& var, double& mean)
 	double sqSum = 0;
 	time_t start, end;
 	double allRunTime = 0;
+	time(&start);
 	for (int i = 0; i < numberOfRuns; i++)
 	{
-		time(&start);
+		
 		double xi = 0;
 		opt_price(xi);
-		//cout << i + 1 << ")  " << xi << endl;
-		//randFT = unif_dis(gen);
 		sqSum += xi * xi;
 		mean += xi;
-		time(&end);
+		
 		allRunTime += difftime(start, end);
 		fout << endl << "new run " << endl;
 	}
+	time(&end);
 	mean *= 1.0 / numberOfRuns;
 	sqSum *= 1.0 / numberOfRuns;
 	var = sqSum - (mean * mean);
 	sigma = sqrt(var);
-	cout << "Average time  8k, trajectories " << allRunTime / numberOfRuns << endl;
+	cout << "Average running time  " << allRunTime / numberOfRuns << endl;
 }
 
 int main()
