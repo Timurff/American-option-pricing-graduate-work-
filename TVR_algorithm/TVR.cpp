@@ -193,6 +193,28 @@ vector<double> SGD_step(vector<double> beta, double X_i, double W, double step)
 	return res;
 }
 
+//SGD с регул€ризацией
+vector<double> SGD_step_L2_reg(vector<double> beta, double X_i, double W, double step, double lambda)
+{
+	vector<double> x = basis(X_i);
+	vector<double> res(basis_fun_am);
+	double adjust = 0;
+	for (int i = 0; i < basis_fun_am; i++)
+	{
+		adjust += beta[i] * x[i];
+	}
+
+	adjust -= W;
+	adjust = adjust * 2 * step;
+
+	for (int i = 0; i < basis_fun_am; i++)
+	{
+		res[i] = beta[i] * (1 - step * lambda) - adjust * x[i];
+	}
+
+	return res;
+}
+
 void SGD(vector<double>& beta, vector<double> W, double** prices, int time)
 {
 	vector<double> next_beta(basis_fun_am);
@@ -206,7 +228,8 @@ void SGD(vector<double>& beta, vector<double> W, double** prices, int time)
 	do {
 		iter_num++;
 		int ind = unif_dis_int(gen);
-		next_beta = SGD_step(beta, prices[ind][time], W[ind], 1. / M);
+		//next_beta = SGD_step(beta, prices[ind][time], W[ind], 1. / M);
+		next_beta = SGD_step_L2_reg(beta, prices[ind][time], W[ind], 1. / M, 5.);
 		w_distance = norm_2(beta, next_beta);
 		beta = next_beta;
 	} while (w_distance > eps);
