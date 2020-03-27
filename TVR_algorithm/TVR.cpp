@@ -25,6 +25,7 @@ random_device rd;
 mt19937 gen(rd());
 
 ofstream fout;
+typedef std::vector<double> stdvec;
 
 uniform_real_distribution<double> unif_dis(0, 1);
 
@@ -77,14 +78,14 @@ vector<double> basis(double x)
 	return res;
 }
 
-double MSE(double** price, vector<double> W, vector<double> beta, int time)
+double MSE(arma::mat& price, vector<double> W, vector<double> beta, int time)
 {
 	double res = 0;
 	for (int i = 0; i < M; i++)
 	{
 		for (int j = 0; j < basis_fun_am; j++)
 		{
-			double temp = basis(price[i][time])[j] * beta[j] - W[i];
+			double temp = basis(price(i, time))[j] * beta[j] - W[i];
 			res += temp * temp;
 		}
 	}
@@ -92,7 +93,6 @@ double MSE(double** price, vector<double> W, vector<double> beta, int time)
 	return res;
 }
 
-//фиксить??
 //Функция считающая значени платежной
 double pay_func(double x, double time)
 {
@@ -100,7 +100,6 @@ double pay_func(double x, double time)
 	return
 		temp * max(0.0, (K - x));
 }
-
 
 //фиксить
 //Функция создающая вектор с 16 нормально распределенными величинами
@@ -126,45 +125,60 @@ vector<double> norm_dis_vec()
 	return nDis;
 }
 
-
 //функция генерирующая матрицу M * N цен, и заполняет нужный для вычислений вектор W, использует квази числа
-void price_modeling_QMC(double** price_matrix, vector<double>& W)
+void price_modeling_QMC(arma::mat& price_matrix, vector<double>& W)
 {
 	vector<double> normal_numbers(N);
 	for (int i = 0; i < M; i++)
 	{
-		price_matrix[i][0] = S0;
+		price_matrix(i, 0) = S0;
 		normal_numbers = norm_dis_vec();
 
 		for (int j = 1; j < N + 1; j++)
 		{
-			price_matrix[i][j] = price_matrix[i][j - 1] * exp(pf1 + pf2 * normal_numbers[j - 1]);
+			price_matrix(i, j) = price_matrix(i, j - 1) * exp(pf1 + pf2 * normal_numbers[j - 1]);
 		}
 
-		W[i] = pay_func(price_matrix[i][N], N);
+		W[i] = pay_func(price_matrix(i, N), N);
 	}
 }
-
 
 //функция генерирующая матрицу M * N цен, и заполняет нужный для вычислений вектор W
-void price_modeling(double** price_matrix, vector<double>& W)
+void price_modeling(arma::mat& price_matrix, vector<double>& W)
 {
-	vector<double> normal_numbers(N);
 	for (int i = 0; i < M; i++)
 	{
-		price_matrix[i][0] = S0;
-		normal_numbers = norm_dis_vec();
+		price_matrix(i, 0) = S0;
 
 		for (int j = 1; j < N + 1; j++)
 		{
-			price_matrix[i][j] = price_matrix[i][j - 1] * exp(pf1 + pf2 * norm_dis(gen));
+			price_matrix(i, j) = price_matrix(i, j - 1) * exp(pf1 + pf2 * norm_dis(gen));
 		}
 
-		W[i] = pay_func(price_matrix[i][N], N);
+		W[i] = pay_func(price_matrix(i, N), N);
 	}
 }
 
+arma::mat construct_at_time(arma::mat prices, int time)
+{
+	arma::mat result = arma::mat(M, basis_fun_am);
+	arma::rowvec temp;
+	for (int i = 0; i < result.n_rows; i++)
+	{
+		temp = arma::rowvec(basis(prices(i, time)));
+		result.row(i) = temp;
+	}
+	return result;
+}
 
+vector<double> least_square_reg(arma::mat prices, vector<double> W, int time)
+{
+	arma::mat X = construct_at_time(prices, time);
+	arma::vec Y = arma::vec(W);
+	arma::mat Xt = X.t();
+	arma::vec result = arma::pinv(Xt*X)*Xt*Y;
+	return arma::conv_to<stdvec>::from(result);
+}
 
 //шаг стохастического градиентного шага
 vector<double> SGD_step(vector<double> beta, double X_i, double W, double step)
@@ -236,101 +250,40 @@ void SGD(vector<double>& beta, vector<double> W, double** prices, int time)
 	cout <<endl <<  " iter am   " << iter_num << endl;
 }
 
-vector<double> GD_step(vector<double> beta, double** X, vector<double> W, double step)
-{
-	vector<double> res(basis_fun_am);
-
-	for (int k = 0; k < basis_fun_am; k++)
-	{
-		double adj = 0;
-		for (int j = 0; j < M; j++)
-		{
-			double temp = 0;
-			for (int i = 0; i < basis_fun_am; i++)
-			{
-				temp += X[j][i] * beta[i];
-			}
-			temp -= W[j];
-			temp *= X[j][k];
-			adj += temp;
-		}
-		res[k] = beta[k] - 2 * step * adj;
-	}
-
-	return res;
-}
-
-void GD(vector<double>& beta, vector<double> W, double** prices, int time)
-{
-	uniform_real_distribution<double> first_adj(-1. / (2 * basis_fun_am), 1. / (2 * basis_fun_am));
-
-	double** regr = new double*[M];
-	for (int n = 0; n <= M; n++)
-		regr[n] = new double[basis_fun_am];
-
-	for (int i = 0; i < M; i++)
-	{
-		for (int j = 0; j < basis_fun_am; j++)
-		{
-			regr[i][j] = basis_func(prices[i][time], j);
-		}
-	}
-
-	vector<double> next_beta(basis_fun_am);
-
-	for (int i = 0; i < next_beta.size(); i++)
-	{
-		beta[i] = first_adj(gen);
-	}
-	int iter_num = 0;
-	double w_distance = 1;
-	do {
-		iter_num++;
-		next_beta = GD_step(beta, regr, W, 1. / M);
-		w_distance = norm_2(beta, next_beta);
-		beta = next_beta;
-	} while (w_distance > eps);
-	cout << iter_num << endl;
-	/*for (int i = 0; i < M; i++)
-	{
-		delete[] regr[i];
-	}
-	delete[] regr;*/
-}
-
 //Функция вычисляющая вектор кэфов бета 
-void linear_reg(vector<double>& beta, vector<double> W, double** prices, int time)
+void linear_reg(vector<double>& beta, vector<double> W, arma::mat& prices, int time)
 {
-	//уже тут я рандомлю номер элемента, по которому улучшаю свою оценку, начальное приближение сделаю (0, 0 , 0, 0 ,0) 
-	//SGD(beta, W, prices, time);
-	GD(beta, W, prices, time);
-	double error = MSE(prices, W, beta, time);
-	cout << "MSE  " << error << endl;
+	beta = least_square_reg(prices, W, time);
+	//cout << MSE(prices, W, beta, time) << endl;
 }
 
 //Функция выдающая оценку
 void opt_price(double& x)
 {
+	/*
 	double** price = new double*[M];
 	for (int n = 0; n <= M; n++)
 		price[n] = new double[N + 1];
+	*/
+	arma::mat price = arma::mat(M, N + 1);
 	vector<double> W(M);
 	vector<double> beta_j(basis_fun_am);
 
 	double option_price = 0;
 
-	price_modeling_QMC(price, W); //это с квази числами
+	price_modeling(price, W); //это without квази числами
+	
 	for (int time = N; time >= 0; time--)
 	{
-		linear_reg(beta_j, W, price, time);
+		linear_reg(beta_j, W, price, N);
 		for (int traectory = 0; traectory < M; traectory++)
 		{
 			double q = 0;
 			for (int k = 0; k < basis_fun_am; k++)
 			{
-				q += beta_j[k] * basis_func(price[traectory][time], k);
+				q += beta_j[k] * basis_func(price(traectory, time), k);
 			}
-			W[traectory] = max(pay_func(price[traectory][time], time), q);
+			W[traectory] = max(pay_func(price(traectory, time), time), q);
 			if (time == 0)
 			{
 				option_price += W[traectory];
@@ -364,6 +317,7 @@ void stats(int numberOfRuns, double& sigma, double& var, double& mean)
 	sqSum *= 1.0 / numberOfRuns;
 	var = sqSum - (mean * mean);
 	sigma = sqrt(var);
+	allRunTime += difftime(start, end);
 	cout << "Average running time  " << allRunTime / numberOfRuns << endl;
 }
 
@@ -377,31 +331,8 @@ int main()
 	double var = 0;
 	double mean = 0;
 
-	arma::mat a = arma::mat(3, 3);
-	for (int i = 0; i < 3; i++)
-	{
-		for (int j = 0; j < 3; j++)
-		{
-			if (i == j) a(i, j) = 1;
-			else a(i, j) = 0;
-			cout << a(i, j) << " ";
-		}
-		cout << endl;
-	}
-	arma::mat b = arma::inv(a);
-	cout << "hey you";
-	for (int i = 0; i < 3; i++)
-	{
-		for (int j = 0; j < 3; j++)
-		{
-
-			cout << b(i, j) << " ";
-		}
-		cout << endl;
-	}
 	//opt_price(var);
-	cout << var << endl;
-	//stats(1, sigma, var, mean);
+	stats(1, sigma, var, mean);
 	cout << "Mean:   " << mean << "   Sigma:   " << sigma << "    Variance:     " << var;
 	//Сетка при 1000 шагов  2.2048
 	//увеличить до 40 мб
@@ -410,12 +341,12 @@ int main()
 
 
 /*
-for (int i = 0; i < price.size(); i++) //вывод траекторий в файл
-{
-	for (int j = 0; j < price[i].size(); j++)
+	for (int i = 0; i < price.n_rows; i++) //вывод траекторий в файл
 	{
-		fout << price[i][j] << "  ";
+		for (int j = 0; j < price.n_cols; j++)
+		{
+			fout << price(i, j) << "  ";
+		}
+		fout << endl;
 	}
-	fout << endl;
-}
 */
