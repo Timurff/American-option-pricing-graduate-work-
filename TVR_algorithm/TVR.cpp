@@ -39,19 +39,6 @@ uniform_int_distribution<> unif_dis_int(0, M - 1);
 Sobol sobol(N);
 double sx[N];
 
-//считает норму разсности двух векторов
-double norm_2(vector<double> v1, vector<double> v2)
-{
-	double res = 0;
-	for (int i = 0; i < v1.size(); i++)
-	{
-		double temp = (v1[i] - v2[i]);
-		res += temp * temp;
-	}
-
-	return sqrt(res);
-}
-
 //Функция которая считает значение базисных многочленов
 double basis_func(double x, int power)
 {
@@ -78,21 +65,6 @@ vector<double> basis(double x)
 	return res;
 }
 
-double MSE(arma::mat& price, vector<double> W, vector<double> beta, int time)
-{
-	double res = 0;
-	for (int i = 0; i < M; i++)
-	{
-		for (int j = 0; j < basis_fun_am; j++)
-		{
-			double temp = basis(price(i, time))[j] * beta[j] - W[i];
-			res += temp * temp;
-		}
-	}
-
-	return res;
-}
-
 //Функция считающая значени платежной
 double pay_func(double x, double time)
 {
@@ -101,15 +73,14 @@ double pay_func(double x, double time)
 		temp * max(0.0, (K - x));
 }
 
-//фиксить
 //Функция создающая вектор с 16 нормально распределенными величинами
-vector<double> norm_dis_vec()
+vector<double> norm_dis_vec(double rand_num)
 {
 	sobol.next(sx);
 	for (int i = 0; i < N; i++)
 	{
 		double& sxi = sx[i];
-		double rand_num = unif_dis(gen);
+		//double rand_num = unif_dis(gen);
 		sxi += rand_num;
 		if (sxi > 1) sxi -= 1;
 	}
@@ -126,25 +97,32 @@ vector<double> norm_dis_vec()
 }
 
 //функция генерирующая матрицу M * N цен, и заполняет нужный для вычислений вектор W, использует квази числа
-void price_modeling_QMC(arma::mat& price_matrix, vector<double>& W)
+void price_modeling_QMC(arma::mat& price_matrix, arma::mat& W)
 {
 	vector<double> normal_numbers(N);
+	int step = M / 5;
+	double rand_num = unif_dis(gen);
 	for (int i = 0; i < M; i++)
 	{
+		if (i >= step)
+		{
+			step += M / 5;
+			rand_num = unif_dis(gen);
+		}
 		price_matrix(i, 0) = S0;
-		normal_numbers = norm_dis_vec();
+		normal_numbers = norm_dis_vec(rand_num);
 
 		for (int j = 1; j < N + 1; j++)
 		{
 			price_matrix(i, j) = price_matrix(i, j - 1) * exp(pf1 + pf2 * normal_numbers[j - 1]);
 		}
 
-		W[i] = pay_func(price_matrix(i, N), N);
+		W(i) = pay_func(price_matrix(i, N), N);
 	}
 }
 
 //функция генерирующая матрицу M * N цен, и заполняет нужный для вычислений вектор W
-void price_modeling(arma::mat& price_matrix, vector<double>& W)
+void price_modeling(arma::mat& price_matrix, arma::mat& W)
 {
 	for (int i = 0; i < M; i++)
 	{
@@ -155,7 +133,7 @@ void price_modeling(arma::mat& price_matrix, vector<double>& W)
 			price_matrix(i, j) = price_matrix(i, j - 1) * exp(pf1 + pf2 * norm_dis(gen));
 		}
 
-		W[i] = pay_func(price_matrix(i, N), N);
+		W(i) = pay_func(price_matrix(i, N), N);
 	}
 }
 
@@ -171,46 +149,38 @@ arma::mat construct_at_time(arma::mat prices, int time)
 	return result;
 }
 
-void least_square_regr(arma::vec& beta, arma::mat X, vector<double> W, int time)
+void least_square_regr(arma::mat& beta, arma::mat X, arma::mat W, int time)
 {
-	
-	arma::vec Y = arma::vec(W);
 	arma::mat Xt = X.t();
-	beta = arma::pinv(Xt*X)*Xt*Y;
+	beta = arma::pinv(Xt*X)*Xt*W;
 }
 
-arma::vec predict(arma::mat X, arma::vec coef) 
+arma::mat predict(arma::mat X, arma::mat coef) 
 {
 	return X * coef;
-}
-
-//Функция вычисляющая вектор кэфов бета 
-void linear_reg(arma::vec& beta, vector<double> W, arma::mat& prices_at_time, int time)
-{
-	least_square_regr(beta, prices_at_time, W, time);
 }
 
 //Функция выдающая оценку
 void opt_price(double& x)
 {
 	arma::mat price = arma::mat(M, N + 1);
-	vector<double> W(M);
-	arma::vec beta_j = arma::vec(basis_fun_am);
+	arma::mat W = arma::mat(M, 1);
+	arma::mat beta_j = arma::mat(basis_fun_am, 1);
 	double option_price = 0;
 
-	price_modeling(price, W);
-	
+	price_modeling_QMC(price, W);
+	//price_modeling(price, W);
 	for (int time = N; time >= 0; time--)
 	{
 		arma::mat prices_at_time = construct_at_time(price, time);
-		linear_reg(beta_j, W, prices_at_time, N);
-		arma::vec pred = predict(prices_at_time, beta_j);
-		for (int traectory = 0; traectory < M; traectory++)
+		least_square_regr(beta_j, prices_at_time, W, time);
+		arma::mat pred = predict(prices_at_time, beta_j);
+		for (int trajectory = 0; trajectory < M; trajectory++)
 		{
-			W[traectory] = max(pay_func(price(traectory, time), time), pred(traectory));
+			W[trajectory] = max(pay_func(price(trajectory, time), time), pred(trajectory, 0));
 			if (time == 0)
 			{
-				option_price += W[traectory];
+				option_price += W[trajectory];
 			}
 		}
 
@@ -251,28 +221,9 @@ int main()
 	double var = 0;
 	double mean = 0;
 
-	//opt_price(var);
-	stats(1, sigma, var, mean);
+	stats(20, sigma, var, mean);
 	cout << "Mean:   " << mean << "   Sigma:   " << sigma << "    Variance:     " << var;
 	//Сетка при 1000 шагов  2.2048
 	//увеличить до 40 мб
 	return 0;
 }
-
-
-/*
-	for (int i = 0; i < price.n_rows; i++) //вывод траекторий в файл
-	{
-		for (int j = 0; j < price.n_cols; j++)
-		{
-			fout << price(i, j) << "  ";
-		}
-		fout << endl;
-	}
-*/
-
-/*
-	double** price = new double*[M];
-	for (int n = 0; n <= M; n++)
-		price[n] = new double[N + 1];
-*/
