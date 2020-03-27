@@ -15,7 +15,7 @@
 using namespace std;
 
 const double PI = 3.14159265358979323846;
-const int N = 16, M = 4800, NTHREADS = 4, MSG_DONE = WM_USER + 1, quasi_points_am = 100, random_points_am = M / quasi_points_am;
+const int N = 16, M = 4800, NTHREADS = 4, quasi_points_am = 100, random_points_am = M / quasi_points_am;
 
 Sobol sobol(2);
 
@@ -139,13 +139,6 @@ int MeshThread::Run()
 
 double MeshThread::margin_density()
 {
-	//сгенерировать квази точки
-	//на каждом шаге генерировать обычные точки
-	//рандомизировать все это дело 
-	//генерировать нормальную случ величину для поиска Х
-
-	//делаю набор квази точек он будет 1 на всю работу алгоритма
-	
 	mesh_fill();
 
 	for (int n = N - 1; n >= 0; n--)
@@ -202,28 +195,26 @@ void stats(int numberOfRuns, double& sigma, double& var, double& mean)
 	}
 	WaitForMultipleObjects(NTHREADS, handles, true, INFINITE);
 
-	double S = 0, S2 = 0, amount_of_runs = 0;
+	double S = 0, S2 = 0;
 
 	for (int i = 0; i < NTHREADS; i++)
 	{
 		S += thread[i].S;
 		S2 += thread[i].S2;
-		amount_of_runs += thread[i].amount_of_runs;
 	}
 
-	S /= amount_of_runs;
-	S2 /= amount_of_runs;
+	S /= numberOfRuns;
+	S2 /= numberOfRuns;
 
-	sqSum = S2;
 	mean = S;
+	var = S2 - (mean * mean);
+	sigma = sqrt(var);
+	
 
 	time(&end);
 	allRunTime += difftime(start, end);
-	
-	var = sqSum - (mean * mean);
-	sigma = sqrt(var);
 
-	std::cout << "Average time  8k, trajectories " << allRunTime / numberOfRuns << std::endl;
+	std::cout << "time " << -allRunTime / numberOfRuns << std::endl;
 	std::cout << "Mean " << mean << " var " << var << " sigma " << sigma << std::endl;
 
 	_getch();
@@ -242,7 +233,7 @@ int _tmain(int argc, _TCHAR* argv[])
 }
 
 
-//хочу функции создания квази точек, просто рандомныз точек и функцию делающую из них нормальную величину
+//функции создания квази точек, просто рандомных точек и функция делающую из них нормальную величину
 
 void MeshThread::make_quasi_points()
 {
