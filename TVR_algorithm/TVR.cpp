@@ -15,6 +15,7 @@
 #include <thread>
 #include <chrono>
 #include <fstream>
+#include <armadillo>
 
 
 using namespace std;
@@ -375,7 +376,30 @@ int main()
 	double sigma = 0;
 	double var = 0;
 	double mean = 0;
-	opt_price(var);
+
+	arma::mat a = arma::mat(3, 3);
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < 3; j++)
+		{
+			if (i == j) a(i, j) = 1;
+			else a(i, j) = 0;
+			cout << a(i, j) << " ";
+		}
+		cout << endl;
+	}
+	arma::mat b = arma::inv(a);
+	cout << "hey you";
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < 3; j++)
+		{
+
+			cout << b(i, j) << " ";
+		}
+		cout << endl;
+	}
+	//opt_price(var);
 	cout << var << endl;
 	//stats(1, sigma, var, mean);
 	cout << "Mean:   " << mean << "   Sigma:   " << sigma << "    Variance:     " << var;
