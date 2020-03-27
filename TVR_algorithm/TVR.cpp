@@ -171,119 +171,43 @@ arma::mat construct_at_time(arma::mat prices, int time)
 	return result;
 }
 
-vector<double> least_square_reg(arma::mat prices, vector<double> W, int time)
+void least_square_regr(arma::vec& beta, arma::mat X, vector<double> W, int time)
 {
-	arma::mat X = construct_at_time(prices, time);
+	
 	arma::vec Y = arma::vec(W);
 	arma::mat Xt = X.t();
-	arma::vec result = arma::pinv(Xt*X)*Xt*Y;
-	return arma::conv_to<stdvec>::from(result);
+	beta = arma::pinv(Xt*X)*Xt*Y;
 }
 
-//шаг стохастического градиентного шага
-vector<double> SGD_step(vector<double> beta, double X_i, double W, double step)
+arma::vec predict(arma::mat X, arma::vec coef) 
 {
-	vector<double> x = basis(X_i);
-	vector<double> res(basis_fun_am);
-	double adjust = 0;
-	for (int i = 0; i < basis_fun_am; i++)
-	{
-		adjust += beta[i] * x[i];
-	}
-
-	adjust -= W;
-	adjust = adjust * 2 * step;
-
-	for (int i = 0; i < basis_fun_am; i++)
-	{
-		res[i] = beta[i] - adjust * x[i];
-	}
-	
-	return res;
-}
-
-//SGD шаг с регул€ризацией
-vector<double> SGD_step_L2_reg(vector<double> beta, double X_i, double W, double step, double lambda)
-{
-	vector<double> x = basis(X_i);
-	vector<double> res(basis_fun_am);
-	double adjust = 0;
-	for (int i = 0; i < basis_fun_am; i++)
-	{
-		adjust += beta[i] * x[i];
-	}
-
-	adjust -= W;
-	adjust = adjust * 2 * step;
-
-	for (int i = 0; i < basis_fun_am; i++)
-	{
-		res[i] = beta[i] * (1 - step * lambda) - adjust * x[i];
-	}
-
-	return res;
-}
-
-void SGD(vector<double>& beta, vector<double> W, double** prices, int time)
-{
-	vector<double> next_beta(basis_fun_am);
-	uniform_real_distribution<double> first_adj(-1. / (2 * basis_fun_am), 1. / (2 * basis_fun_am));
-	for (int i = 0; i < next_beta.size(); i++)
-	{
-		beta[i] = first_adj(gen);
-	}
-	int iter_num = 0;
-	double w_distance = 1;
-	do {
-		iter_num++;
-		int ind = unif_dis_int(gen);
-		//next_beta = SGD_step(beta, prices[ind][time], W[ind], 1. / M);
-		next_beta = SGD_step_L2_reg(beta, prices[ind][time], W[ind], 1. / M, 55);
-		w_distance = norm_2(beta, next_beta);
-		beta = next_beta;
-	} while (w_distance > eps);
-
-	for (int i = 0; i < beta.size(); i++)
-	{
-		cout << beta[i] << "    ";
-	}
-	cout <<endl <<  " iter am   " << iter_num << endl;
+	return X * coef;
 }
 
 //‘ункци€ вычисл€юща€ вектор кэфов бета 
-void linear_reg(vector<double>& beta, vector<double> W, arma::mat& prices, int time)
+void linear_reg(arma::vec& beta, vector<double> W, arma::mat& prices_at_time, int time)
 {
-	beta = least_square_reg(prices, W, time);
-	//cout << MSE(prices, W, beta, time) << endl;
+	least_square_regr(beta, prices_at_time, W, time);
 }
 
 //‘ункци€ выдающа€ оценку
 void opt_price(double& x)
 {
-	/*
-	double** price = new double*[M];
-	for (int n = 0; n <= M; n++)
-		price[n] = new double[N + 1];
-	*/
 	arma::mat price = arma::mat(M, N + 1);
 	vector<double> W(M);
-	vector<double> beta_j(basis_fun_am);
-
+	arma::vec beta_j = arma::vec(basis_fun_am);
 	double option_price = 0;
 
-	price_modeling(price, W); //это without квази числами
+	price_modeling(price, W);
 	
 	for (int time = N; time >= 0; time--)
 	{
-		linear_reg(beta_j, W, price, N);
+		arma::mat prices_at_time = construct_at_time(price, time);
+		linear_reg(beta_j, W, prices_at_time, N);
+		arma::vec pred = predict(prices_at_time, beta_j);
 		for (int traectory = 0; traectory < M; traectory++)
 		{
-			double q = 0;
-			for (int k = 0; k < basis_fun_am; k++)
-			{
-				q += beta_j[k] * basis_func(price(traectory, time), k);
-			}
-			W[traectory] = max(pay_func(price(traectory, time), time), q);
+			W[traectory] = max(pay_func(price(traectory, time), time), pred(traectory));
 			if (time == 0)
 			{
 				option_price += W[traectory];
@@ -303,14 +227,10 @@ void stats(int numberOfRuns, double& sigma, double& var, double& mean)
 	time(&start);
 	for (int i = 0; i < numberOfRuns; i++)
 	{
-		
 		double xi = 0;
 		opt_price(xi);
 		sqSum += xi * xi;
 		mean += xi;
-		
-		//allRunTime += difftime(start, end);
-		//fout << endl << "new run " << endl;
 	}
 	time(&end);
 	mean *= 1.0 / numberOfRuns;
@@ -349,4 +269,10 @@ int main()
 		}
 		fout << endl;
 	}
+*/
+
+/*
+	double** price = new double*[M];
+	for (int n = 0; n <= M; n++)
+		price[n] = new double[N + 1];
 */
