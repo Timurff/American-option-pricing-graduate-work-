@@ -15,7 +15,11 @@
 using namespace std;
 
 const double PI = 3.14159265358979323846;
-const int N = 16, M = 4800, NTHREADS = 4, quasi_points_am = 100, random_points_am = M / quasi_points_am;
+const int N = 16, M = 2400, NTHREADS = 4, quasi_points_am = 100, random_points_am = M / quasi_points_am;
+
+enum { QUASI, NOT_QUASI };
+
+const int mode = NOT_QUASI;
 
 Sobol sobol(2);
 
@@ -38,6 +42,7 @@ class MeshThread : public CWinThread
 {
 	int Run();
 	void mesh_init();
+	void mesh_fill_quasi();
 	void mesh_fill();
 	double margin_density();
 	void make_quasi_points();
@@ -77,7 +82,7 @@ void MeshThread::mesh_init()
 	for (int n = 0; n <= N; n++) node[n] = new Node[M];
 }
 
-void MeshThread::mesh_fill()
+void MeshThread::mesh_fill_quasi()
 {
 	node[0][0].x = x0;
 	
@@ -109,6 +114,36 @@ void MeshThread::mesh_fill()
 
 }
 
+void MeshThread::mesh_fill() 
+{
+	normal_distribution<double> norm_dis(0, 1);
+	uniform_real_distribution<double> unif_dis(0, 1);
+
+	random_device rd;
+	mt19937 gen(rd());
+
+	node[0][0].x = x0;
+
+	for (int n = 0; n < N; n++)
+	{
+		int n1 = n + 1;
+		double nmu = n1 * mu_dt,
+			nsig = n1 * sqrt_dt * sigma;
+
+		for (int m1 = 0; m1 < M; m1++)
+		{
+			double x = x0 + nmu + nsig * norm_dis(gen);
+			node[n1][m1].x = x;
+			node[n1][m1].q = normal_density(x0 + nmu - x, nsig);
+		}
+	}
+
+	for (int m = 0; m < M; m++)
+	{
+		node[N][m].Y = max(K - exp(node[N][m].x), 0.);
+	}
+
+}
 
 double MeshThread::normal_density(double x, double s)
 {
@@ -139,7 +174,14 @@ int MeshThread::Run()
 
 double MeshThread::margin_density()
 {
-	mesh_fill();
+	if (mode == QUASI)
+	{
+		mesh_fill_quasi();
+	}
+	else
+	{
+		mesh_fill();
+	}
 
 	for (int n = N - 1; n >= 0; n--)
 	{

@@ -20,21 +20,27 @@
 
 using namespace std;
 
+enum { BASIS_1, BASIS_2 };
+enum { QUASI, NOT_QUASI };
+
 normal_distribution<double> norm_dis(0, 1);
 random_device rd;
 mt19937 gen(rd());
 
 ofstream fout;
-typedef std::vector<double> stdvec;
 
 uniform_real_distribution<double> unif_dis(0, 1);
 
-const int N = 16, M = 8192, basis_fun_am = 7; //Число шагов // количество моделируемых траекторий
+
+const int BASIS = BASIS_1, mode = QUASI;
+
+
+
+const int N = 16, M = 8192 * 2; //Число шагов // количество моделируемых траекторий
 double S0 = 100, sigma = 0.08, mu = 0.05, dt = 1.0 / N, //начальная цена, волатильность, текущая процентная ставка
 K = 101, pf1 = (mu - sigma * sigma * 0.5) * dt, pf2 = sigma * sqrt(dt); //strike price и просто промежуточные вычисления
 double eps = 0.00001;
-
-uniform_int_distribution<> unif_dis_int(0, M - 1);
+int basis_fun_am = 7;
 
 Sobol sobol(N);
 double sx[N];
@@ -52,8 +58,32 @@ double basis_func(double x, int power)
 	}
 }
 
+double basis_func_2(double x, int power)
+{
+	if (power == 0) 
+	{
+		return 1;
+	}
+	else
+	{
+		return  pow((x - 101), (power));
+	}
+}
+
 //возвращает вектор с примененным к x базисными функциями
 vector<double> basis(double x)
+{
+	vector<double> res(basis_fun_am);
+
+	for (int i = 0; i < basis_fun_am; i++)
+	{
+		res[i] = basis_func(x, i);
+	}
+
+	return res;
+}
+
+vector<double> basis_2(double x)
 {
 	vector<double> res(basis_fun_am);
 
@@ -143,7 +173,7 @@ arma::mat construct_at_time(arma::mat prices, int time)
 	arma::rowvec temp;
 	for (int i = 0; i < result.n_rows; i++)
 	{
-		temp = arma::rowvec(basis(prices(i, time)));
+		temp = BASIS == BASIS_1 ? arma::rowvec(basis(prices(i, time))) : arma::rowvec(basis_2(prices(i, time)));
 		result.row(i) = temp;
 	}
 	return result;
@@ -163,13 +193,22 @@ arma::mat predict(arma::mat X, arma::mat coef)
 //Функция выдающая оценку
 void opt_price(double& x)
 {
+	basis_fun_am = BASIS == BASIS_1 ? 7 : 5;
+
 	arma::mat price = arma::mat(M, N + 1);
 	arma::mat W = arma::mat(M, 1);
 	arma::mat beta_j = arma::mat(basis_fun_am, 1);
 	double option_price = 0;
 
-	price_modeling_QMC(price, W);
-	//price_modeling(price, W);
+	if (mode == QUASI)
+	{
+		price_modeling_QMC(price, W);
+	}
+	else
+	{
+		price_modeling(price, W);
+	}
+
 	for (int time = N; time >= 0; time--)
 	{
 		arma::mat prices_at_time = construct_at_time(price, time);
