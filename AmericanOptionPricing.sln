@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TVR_algorithm", "TVR_algori
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "StochasticGrid", "StochasticGrid\StochasticGrid.vcxproj", "{563B8F9D-3856-4745-A530-E4C4B8958C7D}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "LSM_multidim", "LSM_multidim\LSM_multidim.vcxproj", "{32720DC1-FA65-43FA-A2FE-AC732E126C29}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -29,6 +31,14 @@ Global
 		{563B8F9D-3856-4745-A530-E4C4B8958C7D}.Release|x64.ActiveCfg = Release|Win32
 		{563B8F9D-3856-4745-A530-E4C4B8958C7D}.Release|x86.ActiveCfg = Release|Win32
 		{563B8F9D-3856-4745-A530-E4C4B8958C7D}.Release|x86.Build.0 = Release|Win32
+		{32720DC1-FA65-43FA-A2FE-AC732E126C29}.Debug|x64.ActiveCfg = Debug|x64
+		{32720DC1-FA65-43FA-A2FE-AC732E126C29}.Debug|x64.Build.0 = Debug|x64
+		{32720DC1-FA65-43FA-A2FE-AC732E126C29}.Debug|x86.ActiveCfg = Debug|Win32
+		{32720DC1-FA65-43FA-A2FE-AC732E126C29}.Debug|x86.Build.0 = Debug|Win32
+		{32720DC1-FA65-43FA-A2FE-AC732E126C29}.Release|x64.ActiveCfg = Release|x64
+		{32720DC1-FA65-43FA-A2FE-AC732E126C29}.Release|x64.Build.0 = Release|x64
+		{32720DC1-FA65-43FA-A2FE-AC732E126C29}.Release|x86.ActiveCfg = Release|Win32
+		{32720DC1-FA65-43FA-A2FE-AC732E126C29}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
