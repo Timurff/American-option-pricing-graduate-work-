@@ -32,12 +32,12 @@ ofstream fout;
 uniform_real_distribution<double> unif_dis(0, 1);
 
 
-const int BASIS = BASIS_1, mode = QUASI;
+const int BASIS = BASIS_1, mode = NOT_QUASI;
 
 
-
-const int N = 16, M = 8192 * 2; //Число шагов // количество моделируемых траекторий
-double S0 = 100, sigma = 0.08, mu = 0.05, dt = 1.0 / N, //начальная цена, волатильность, текущая процентная ставка
+int number_of_runs = 20;
+const int N = 16, M = 8092 * 2; //Число шагов // количество моделируемых траекторий
+double S0 = 100, sigma = 0.08, mu = 0.05, T = 1., dt = T / N, //начальная цена, волатильность, текущая процентная ставка
 K = 101, pf1 = (mu - sigma * sigma * 0.5) * dt, pf2 = sigma * sqrt(dt); //strike price и просто промежуточные вычисления
 double eps = 0.00001;
 int basis_fun_am = 7;
@@ -96,11 +96,9 @@ vector<double> basis_2(double x)
 }
 
 //Функция считающая значени платежной
-double pay_func(double x, double time)
+double pay_func(double x)
 {
-	double temp = exp(-0.05 * (time / N));
-	return
-		temp * max(0.0, (K - x));
+	return max(0.0, (K - x));
 }
 
 //Функция создающая вектор с 16 нормально распределенными величинами
@@ -147,7 +145,7 @@ void price_modeling_QMC(arma::mat& price_matrix, arma::mat& W)
 			price_matrix(i, j) = price_matrix(i, j - 1) * exp(pf1 + pf2 * normal_numbers[j - 1]);
 		}
 
-		W(i) = pay_func(price_matrix(i, N), N);
+		W(i) = pay_func(price_matrix(i, N));
 	}
 }
 
@@ -163,17 +161,17 @@ void price_modeling(arma::mat& price_matrix, arma::mat& W)
 			price_matrix(i, j) = price_matrix(i, j - 1) * exp(pf1 + pf2 * norm_dis(gen));
 		}
 
-		W(i) = pay_func(price_matrix(i, N), N);
+		W(i) = pay_func(price_matrix(i, N));
 	}
 }
 
-arma::mat construct_at_time(arma::mat prices, int time)
+arma::mat construct_at_time(int rows, arma::vec prices)
 {
-	arma::mat result = arma::mat(M, basis_fun_am);
+	arma::mat result = arma::mat(rows, basis_fun_am);
 	arma::rowvec temp;
 	for (int i = 0; i < result.n_rows; i++)
 	{
-		temp = BASIS == BASIS_1 ? arma::rowvec(basis(prices(i, time))) : arma::rowvec(basis_2(prices(i, time)));
+		temp = BASIS == BASIS_1 ? arma::rowvec(basis(prices(i))) : arma::rowvec(basis_2(prices(i)));
 		result.row(i) = temp;
 	}
 	return result;
@@ -209,20 +207,43 @@ void opt_price(double& x)
 		price_modeling(price, W);
 	}
 
-	for (int time = N; time >= 0; time--)
+	for (int time = N - 1; time >= 1; time--)
 	{
-		arma::mat prices_at_time = construct_at_time(price, time);
-		least_square_regr(beta_j, prices_at_time, W, time);
-		arma::mat pred = predict(prices_at_time, beta_j);
-		for (int trajectory = 0; trajectory < M; trajectory++)
+		W = W * exp(-mu * dt);
+		arma::vec price_now = price.col(time);
+		arma::vec exercise(price_now.n_elem);
+
+		for (int i = 0; i < exercise.n_elem; i++)
 		{
-			W[trajectory] = max(pay_func(price(trajectory, time), time), pred(trajectory, 0));
-			if (time == 0)
-			{
-				option_price += W[trajectory];
-			}
+			exercise(i) = pay_func(price_now(i));
 		}
 
+		
+		arma::uvec itm_paths = arma::find(exercise);
+		arma::vec price_now_slice(itm_paths.n_elem);
+		arma::vec W_now(itm_paths.n_elem);
+
+		for (int i = 0; i < itm_paths.n_elem; i++)
+		{
+			price_now_slice(i) = price_now(itm_paths(i));
+			W_now(i) = W(itm_paths(i));
+		}
+
+		arma::mat prices_at_time = construct_at_time(itm_paths.n_elem, price_now_slice);
+
+		least_square_regr(beta_j, prices_at_time, W_now, time);
+		arma::mat continuation = predict(prices_at_time, beta_j);
+
+		for (int trajectory = 0; trajectory < itm_paths.n_elem; trajectory++)
+		{
+			W(itm_paths(trajectory)) = max(exercise(itm_paths(trajectory)), continuation(trajectory, 0));
+		}
+	}
+
+	W = W * exp(-mu * dt);
+	for (int i = 0; i < M; i++)
+	{
+		option_price += W(i);
 	}
 	x = option_price / M;
 }
@@ -260,7 +281,7 @@ int main()
 	double var = 0;
 	double mean = 0;
 
-	stats(20, sigma, var, mean);
+	stats(number_of_runs, sigma, var, mean);
 	cout << "Mean:   " << mean << "   Sigma:   " << sigma << "    Variance:     " << var;
 	//Сетка при 1000 шагов  2.2048
 	//увеличить до 40 мб
