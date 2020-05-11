@@ -32,7 +32,7 @@ ofstream fout;
 uniform_real_distribution<double> unif_dis(0, 1);
 
 
-const int BASIS = BASIS_1, mode = NOT_QUASI;
+const int BASIS = BASIS_2, mode = QUASI;
 
 
 int number_of_runs = 20;

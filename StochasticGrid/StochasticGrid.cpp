@@ -15,18 +15,18 @@
 using namespace std;
 
 const double PI = 3.14159265358979323846;
-const int N = 16, M = 2400, NTHREADS = 4, quasi_points_am = 100, random_points_am = M / quasi_points_am;
+const int N = 16, M = 4800, NTHREADS = 4, quasi_points_am = 100, random_points_am = M / quasi_points_am;
 
 enum { QUASI, NOT_QUASI };
 
-const int mode = NOT_QUASI;
+const int mode = QUASI;
 
 Sobol sobol(2);
 
-double a = 0.08, S0 = 100, x0 = log(S0), K = 101, T = 1, r = 0.05, sigma = 0.08; //a - Волатильность,S0 - начальная цена, K - strike price, r - текущая процентная ставка
+double S0 = 100, x0 = log(S0), K = 101, T = 1, r = 0.05, sigma = 0.08; //sigma - Волатильность,S0 - начальная цена, K - strike price, r - текущая процентная ставка
 double dt = T / N,
 sqrt_dt = sqrt(dt),
-mu_dt = (r - 0.5 * a * a) * dt,
+mu_dt = (r - 0.5 * sigma * sigma) * dt,
 alpha = exp(-r * dt),
 sqrt2pi = sqrt(2 * PI);
 
@@ -152,7 +152,7 @@ double MeshThread::normal_density(double x, double s)
 
 double MeshThread::P(double x, double y)
 {
-	return normal_density(x + mu_dt - y, a * sqrt_dt);
+	return normal_density(x + mu_dt - y, sigma * sqrt_dt);
 }
 
 int MeshThread::Run()
@@ -312,8 +312,6 @@ void MeshThread::rnorm_with_quasi(int p, int q, double& normal_value)
 	{
 		second -= 1;
 	}
-	double temp;
-	temp = sqrt(-2 * log(first));
-	double teta = 2 * M_PI * second;
-	normal_value = temp * cos(teta);
+
+	normal_value = sqrt(-2 * log(first)) * cos(2 * M_PI * second);
 }
